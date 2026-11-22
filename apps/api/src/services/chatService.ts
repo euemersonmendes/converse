@@ -8,6 +8,7 @@ import type {
   PollData,
 } from '@converse/shared';
 import { getDb } from '../db/database.js';
+import { scheduleSupabaseSync } from '../db/supabaseSync.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import { getUserById } from './authService.js';
 
@@ -322,6 +323,7 @@ export function sendMessage(input: {
   );
 
   const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as unknown as MessageRow;
+  scheduleSupabaseSync();
   return hydrateMessages([row], input.senderId)[0];
 }
 

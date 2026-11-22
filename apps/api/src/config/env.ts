@@ -26,6 +26,7 @@ export const env = {
   PORT: Number(process.env.PORT || 3001),
   JWT_SECRET: jwtSecret,
   DB_PATH: process.env.DB_PATH || path.resolve(__dirname, '../../data/converse.db'),
+  DATABASE_URL: process.env.DATABASE_URL || '',
   CORS_ORIGIN: corsOrigin,
   NODE_ENV: nodeEnv,
   IS_PROD: isProd,

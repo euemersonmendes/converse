@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import type { AuthSession, DevicePlatform, UserProfile } from '@converse/shared';
 import { env } from '../config/env.js';
 import { getDb } from '../db/database.js';
+import { scheduleSupabaseSync } from '../db/supabaseSync.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import { hashPassword, verifyPassword } from '../utils/crypto.js';
 import { sendPasswordResetSms, type SmsChannel } from './smsService.js';
@@ -159,6 +160,7 @@ export function registerUser(input: {
   );
 
   const user = getUserById(userId)!;
+  scheduleSupabaseSync(userId);
   return createSessionForUser(user, {
     deviceId: input.deviceId,
     deviceName: input.deviceName,
@@ -189,6 +191,7 @@ export function updateProfile(
     userId
   );
 
+  scheduleSupabaseSync(userId);
   return getUserById(userId)!;
 }
 
@@ -274,4 +277,5 @@ export function confirmPasswordReset(input: { identifier: string; code: string; 
   db.prepare('UPDATE password_resets SET used_at = ? WHERE id = ?').run(now, resetRow.id);
   // Revoga sessões anteriores por segurança após troca de senha
   db.prepare('UPDATE device_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(now, user.id);
+  scheduleSupabaseSync(user.id);
 }

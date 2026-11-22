@@ -16,6 +16,8 @@ services:
         generateValue: true
       - key: SEED_DEMO
         value: "false"
+      - key: DATABASE_URL
+        sync: false
       - key: CORS_ORIGIN
         sync: false
       - key: TWILIO_ACCOUNT_SID
