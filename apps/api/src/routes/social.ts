@@ -31,7 +31,7 @@ socialRouter.post('/stories', (req, res, next) => {
   try {
     const body = z
       .object({
-        mediaUrl: z.string().url(),
+        mediaUrl: z.string().min(1).max(15_000_000),
         caption: z.string().max(220).optional(),
         backgroundColor: z.string().max(20).optional(),
       })
@@ -87,7 +87,7 @@ socialRouter.post('/posts', (req, res, next) => {
   try {
     const body = z
       .object({
-        imageUrl: z.string().url(),
+        imageUrl: z.string().min(1).max(15_000_000),
         caption: z.string().min(1).max(1000),
         location: z.string().max(100).optional(),
       })

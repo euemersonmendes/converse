@@ -173,6 +173,11 @@ export const mobileApi = {
 
   getStories: () => request<{ groups: StoryGroup[] }>('/api/social/stories'),
   getPosts: () => request<{ posts: FeedPost[] }>('/api/social/posts'),
+  createPost: (payload: { imageUrl: string; caption: string; location?: string }) =>
+    request<{ post: FeedPost }>('/api/social/posts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   toggleLike: (postId: string) =>
     request<{ liked: boolean; likesCount: number }>(`/api/social/posts/${postId}/like`, { method: 'POST' }),
 
