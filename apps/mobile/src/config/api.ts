@@ -13,12 +13,10 @@ import type {
   StoryGroup,
 } from '@converse/shared';
 
-// Emulador Android usa 10.0.2.2; Simulador iOS usa localhost (com fallback automático para IP da rede Wi-Fi em iPhone físico).
+const PRODUCTION_API_URL = 'https://converse-api-diyo.onrender.com';
 const LAN_FALLBACK_URL = 'http://192.168.3.233:3001';
 
-export let API_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  (Platform.OS === 'android' ? 'http://10.0.2.2:3001' : 'http://localhost:3001');
+export let API_URL = process.env.EXPO_PUBLIC_API_URL || PRODUCTION_API_URL;
 
 export function setApiUrl(url: string) {
   API_URL = url.trim().replace(/\/+$/, '');
