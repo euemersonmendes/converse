@@ -35,7 +35,7 @@ interface ChatWindowProps {
   currentUserId: string;
   typingUserIds: string[];
   onSendMessage: (payload: {
-    type?: 'text' | 'image' | 'audio';
+    type?: 'text' | 'image' | 'audio' | 'video';
     content: string;
     mediaUrl?: string;
     audioDurationSec?: number;
@@ -90,6 +90,16 @@ export function ChatWindow({
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [showImagePrompt, setShowImagePrompt] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState('');
+  const [recordingAudio, setRecordingAudio] = useState(false);
+  const [recordingSec, setRecordingSec] = useState(0);
+
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<number | null>(null);
+  const recordStartRef = useRef<number>(0);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
 
   // In-chat search
   const [searchOpen, setSearchOpen] = useState(false);
@@ -168,15 +178,113 @@ export function ChatWindow({
     onTyping(false);
   };
 
-  const handleSendAudio = () => {
-    const duration = Math.floor(Math.random() * 18) + 4;
-    onSendMessage({
-      type: 'audio',
-      content: `Áudio (0:${duration < 10 ? '0' : ''}${duration})`,
-      audioDurationSec: duration,
-      replyToId: replyTo?.id ?? null,
-    });
-    setReplyTo(null);
+  const stopAudioRecording = (send: boolean) => {
+    if (recordTimerRef.current) {
+      window.clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = () => {
+        recorder.stream.getTracks().forEach((t) => t.stop());
+        if (!send) {
+          audioChunksRef.current = [];
+          return;
+        }
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        audioChunksRef.current = [];
+        const duration = Math.max(1, Math.round((Date.now() - recordStartRef.current) / 1000));
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = typeof reader.result === 'string' ? reader.result : undefined;
+          onSendMessage({
+            type: 'audio',
+            content: `🎤 Áudio (0:${duration < 10 ? '0' : ''}${duration})`,
+            mediaUrl: dataUrl,
+            audioDurationSec: duration,
+            replyToId: replyTo?.id ?? null,
+          });
+          setReplyTo(null);
+        };
+        reader.readAsDataURL(blob);
+      };
+      recorder.stop();
+    }
+    mediaRecorderRef.current = null;
+    setRecordingAudio(false);
+    setRecordingSec(0);
+  };
+
+  const handleToggleAudioRecord = async () => {
+    if (recordingAudio) {
+      stopAudioRecording(true);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
+      };
+      mediaRecorderRef.current = recorder;
+      recordStartRef.current = Date.now();
+      setRecordingSec(0);
+      setRecordingAudio(true);
+      recorder.start();
+      recordTimerRef.current = window.setInterval(() => {
+        setRecordingSec(Math.round((Date.now() - recordStartRef.current) / 1000));
+      }, 500);
+    } catch {
+      const duration = Math.floor(Math.random() * 12) + 4;
+      onSendMessage({
+        type: 'audio',
+        content: `🎤 Áudio (0:${duration < 10 ? '0' : ''}${duration})`,
+        audioDurationSec: duration,
+        replyToId: replyTo?.id ?? null,
+      });
+      setReplyTo(null);
+    }
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>, kind: 'image' | 'video') => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 14 * 1024 * 1024) {
+      window.alert('Arquivo muito grande. Escolha um arquivo de até 14 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (!dataUrl) return;
+      onSendMessage({
+        type: kind,
+        content: kind === 'image' ? '📷 Foto' : '🎬 Vídeo',
+        mediaUrl: dataUrl,
+        replyToId: replyTo?.id ?? null,
+      });
+      setShowImagePrompt(false);
+      setReplyTo(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleTogglePlayAudio = (msg: MessageItem) => {
+    if (playingAudioId === msg.id) {
+      audioElRef.current?.pause();
+      setPlayingAudioId(null);
+      return;
+    }
+    if (msg.mediaUrl) {
+      audioElRef.current?.pause();
+      const audio = new Audio(msg.mediaUrl);
+      audioElRef.current = audio;
+      audio.onended = () => setPlayingAudioId(null);
+      audio.play().catch(() => {});
+    }
+    setPlayingAudioId(msg.id);
   };
 
   const handleSendImage = (e: React.FormEvent) => {
@@ -507,6 +615,15 @@ export function ChatWindow({
                     <img src={msg.mediaUrl} alt="Mídia" className="rounded-lg max-h-64 w-full object-cover mb-1.5" />
                   )}
 
+                  {msg.type === 'video' && msg.mediaUrl && (
+                    <video
+                      src={msg.mediaUrl}
+                      controls
+                      playsInline
+                      className="rounded-lg max-h-64 w-full object-cover mb-1.5 bg-black"
+                    />
+                  )}
+
                   {/* Interactive Poll */}
                   {msg.type === 'poll' && msg.poll ? (
                     <div className="min-w-[240px] space-y-2 py-1">
@@ -545,7 +662,7 @@ export function ChatWindow({
                   ) : msg.type === 'audio' && !isDeleted ? (
                     <div className="flex items-center gap-3 min-w-[200px] py-1">
                       <button
-                        onClick={() => setPlayingAudioId(playingAudioId === msg.id ? null : msg.id)}
+                        onClick={() => handleTogglePlayAudio(msg)}
                         className="w-8 h-8 rounded-full bg-[#00D4FF] text-[#0D1520] flex items-center justify-center shrink-0"
                       >
                         {playingAudioId === msg.id ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
@@ -652,14 +769,42 @@ export function ChatWindow({
       )}
 
       {/* Composer */}
-      <form onSubmit={handleSend} className="px-4 py-3 bg-[#0D1520]/90 backdrop-blur-xl border-t border-white/[0.07] flex items-center gap-2.5 shrink-0">
+      <form onSubmit={handleSend} className="px-4 py-3 bg-[#0D1520]/90 backdrop-blur-xl border-t border-white/[0.07] flex items-center gap-2 shrink-0">
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => handleFileSelected(e, 'image')}
+        />
+        <input
+          ref={videoInputRef}
+          type="file"
+          accept="video/*"
+          className="hidden"
+          onChange={(e) => handleFileSelected(e, 'video')}
+        />
+
         <button
           type="button"
-          onClick={() => setShowImagePrompt((s) => !s)}
-          title="Enviar foto por URL"
+          onClick={() => imageInputRef.current?.click()}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setShowImagePrompt((s) => !s);
+          }}
+          title="Enviar Imagem"
           className="p-2.5 rounded-xl text-[#8BA4BE] hover:text-[#00D4FF] hover:bg-[#132030] transition"
         >
           <ImageIcon className="w-5 h-5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => videoInputRef.current?.click()}
+          title="Enviar Vídeo"
+          className="p-2.5 rounded-xl text-[#8BA4BE] hover:text-[#00D4FF] hover:bg-[#132030] transition"
+        >
+          <Video className="w-5 h-5" />
         </button>
 
         <button
@@ -671,13 +816,29 @@ export function ChatWindow({
           <BarChart3 className="w-5 h-5" />
         </button>
 
-        <input
-          type="text"
-          value={text}
-          onChange={(e) => handleInputChange(e.target.value)}
-          placeholder={editingMsg ? 'Edite sua mensagem...' : 'Digite uma mensagem...'}
-          className="flex-1 bg-[#132030] border border-white/[0.07] focus:border-[#00D4FF]/50 rounded-2xl px-4 py-2.5 text-sm text-[#F0F7FF] placeholder-[#8BA4BE] outline-none transition"
-        />
+        {recordingAudio ? (
+          <div className="flex-1 flex items-center justify-between bg-rose-500/15 border border-rose-500/40 rounded-2xl px-4 py-2 text-sm text-rose-300">
+            <span className="flex items-center gap-2 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+              Gravando áudio... 0:{recordingSec < 10 ? '0' : ''}{recordingSec}
+            </span>
+            <button
+              type="button"
+              onClick={() => stopAudioRecording(false)}
+              className="text-xs text-[#8BA4BE] hover:text-white"
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => handleInputChange(e.target.value)}
+            placeholder={editingMsg ? 'Edite sua mensagem...' : 'Digite uma mensagem...'}
+            className="flex-1 bg-[#132030] border border-white/[0.07] focus:border-[#00D4FF]/50 rounded-2xl px-4 py-2.5 text-sm text-[#F0F7FF] placeholder-[#8BA4BE] outline-none transition"
+          />
+        )}
 
         {text.trim() ? (
           <button
@@ -689,11 +850,15 @@ export function ChatWindow({
         ) : (
           <button
             type="button"
-            onClick={handleSendAudio}
-            title="Enviar mensagem de voz"
-            className="w-10 h-10 rounded-2xl bg-[#132030] border border-white/[0.07] hover:border-[#00D4FF]/50 text-[#8BA4BE] hover:text-[#00D4FF] flex items-center justify-center transition shrink-0"
+            onClick={handleToggleAudioRecord}
+            title={recordingAudio ? 'Parar e enviar áudio' : 'Gravar mensagem de voz'}
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center transition shrink-0 ${
+              recordingAudio
+                ? 'bg-rose-500 text-white shadow-[0_0_16px_rgba(244,63,94,0.5)]'
+                : 'bg-[#132030] border border-white/[0.07] hover:border-[#00D4FF]/50 text-[#8BA4BE] hover:text-[#00D4FF]'
+            }`}
           >
-            <Mic className="w-5 h-5" />
+            {recordingAudio ? <Send className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
           </button>
         )}
       </form>

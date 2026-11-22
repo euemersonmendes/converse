@@ -16,7 +16,7 @@ export function createApp() {
 
   app.use(helmet({ crossOriginResourcePolicy: false }));
   app.use(cors({ origin: env.CORS_ORIGIN }));
-  app.use(express.json({ limit: '5mb' }));
+  app.use(express.json({ limit: '25mb' }));
   app.use(
     rateLimit({
       windowMs: 60_000,

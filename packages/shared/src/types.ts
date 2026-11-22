@@ -1,6 +1,6 @@
 export type PresenceStatus = 'online' | 'offline';
 
-export type MessageType = 'text' | 'image' | 'audio' | 'story_reply' | 'match_intro' | 'poll';
+export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'story_reply' | 'match_intro' | 'poll';
 
 export interface PollOption {
   id: string;

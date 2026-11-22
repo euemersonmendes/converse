@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,10 @@ import {
   Platform,
   Alert,
   Modal,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { SOCKET_EVENTS, type ChatSummary, type MessageItem } from '@converse/shared';
 import { mobileApi } from '../config/api';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +31,22 @@ export function ChatDetailScreen({ route }: any) {
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOpt1, setPollOpt1] = useState('');
   const [pollOpt2, setPollOpt2] = useState('');
+
+  // Media (Foto, Vídeo & Áudio)
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
+  const [cameraFacing, setCameraFacing] = useState<'back' | 'front'>('back');
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const [sendingMedia, setSendingMedia] = useState(false);
+  const [recordingAudio, setRecordingAudio] = useState(false);
+  const [audioSec, setAudioSec] = useState(0);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+
+  const cameraRef = useRef<CameraView | null>(null);
+  const audioTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [cameraPerm, requestCameraPerm] = useCameraPermissions();
+  const [micPerm, requestMicPerm] = useMicrophonePermissions();
 
   useEffect(() => {
     mobileApi.getMessages(chat.id).then((res) => setMessages(res.messages));
@@ -142,6 +161,126 @@ export function ChatDetailScreen({ route }: any) {
     setPollModal(false);
   };
 
+  const uriToDataUrl = async (uri: string): Promise<string> => {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+      reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const handleOpenMediaCamera = async (mode: 'picture' | 'video') => {
+    if (!cameraPerm?.granted) {
+      const res = await requestCameraPerm();
+      if (!res.granted) {
+        Alert.alert('Permissão necessária', 'Autorize o acesso à câmera para enviar fotos e vídeos.');
+        return;
+      }
+    }
+    if (mode === 'video' && !micPerm?.granted) {
+      const resMic = await requestMicPerm();
+      if (!resMic.granted) {
+        Alert.alert('Permissão necessária', 'Autorize o microfone para gravar vídeos com áudio.');
+        return;
+      }
+    }
+    setCameraMode(mode);
+    setCameraOpen(true);
+  };
+
+  const handleCaptureOrRecord = async () => {
+    if (!cameraRef.current || sendingMedia) return;
+    if (cameraMode === 'picture') {
+      try {
+        setSendingMedia(true);
+        const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.45 });
+        const mediaUrl = photo?.base64 ? `data:image/jpeg;base64,${photo.base64}` : photo?.uri;
+        if (mediaUrl) {
+          const res = await mobileApi.sendMessage(chat.id, '📷 Foto', replyTo?.id ?? null, {
+            type: 'image',
+            mediaUrl,
+          });
+          setReplyTo(null);
+          setMessages((prev) => (prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]));
+          setCameraOpen(false);
+        }
+      } catch {
+        Alert.alert('Erro', 'Não foi possível enviar a foto.');
+      } finally {
+        setSendingMedia(false);
+      }
+      return;
+    }
+
+    if (isRecordingVideo) {
+      cameraRef.current.stopRecording();
+      return;
+    }
+
+    try {
+      setIsRecordingVideo(true);
+      const video = await cameraRef.current.recordAsync({ maxDuration: 12 });
+      setIsRecordingVideo(false);
+      if (video?.uri) {
+        setSendingMedia(true);
+        const dataUrl = await uriToDataUrl(video.uri);
+        const res = await mobileApi.sendMessage(chat.id, '🎬 Vídeo', replyTo?.id ?? null, {
+          type: 'video',
+          mediaUrl: dataUrl || video.uri,
+        });
+        setReplyTo(null);
+        setMessages((prev) => (prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]));
+        setCameraOpen(false);
+      }
+    } catch {
+      setIsRecordingVideo(false);
+      Alert.alert('Erro', 'Não foi possível gravar/enviar o vídeo.');
+    } finally {
+      setSendingMedia(false);
+    }
+  };
+
+  const handleToggleAudioRecord = async () => {
+    if (!recordingAudio) {
+      if (!micPerm?.granted) {
+        await requestMicPerm().catch(() => {});
+      }
+      setAudioSec(0);
+      setRecordingAudio(true);
+      audioTimerRef.current = setInterval(() => {
+        setAudioSec((s) => s + 1);
+      }, 1000);
+      return;
+    }
+
+    if (audioTimerRef.current) {
+      clearInterval(audioTimerRef.current);
+      audioTimerRef.current = null;
+    }
+    const duration = Math.max(1, audioSec);
+    setRecordingAudio(false);
+    setAudioSec(0);
+    const formatted = `0:${duration < 10 ? '0' : ''}${duration}`;
+    const res = await mobileApi.sendMessage(chat.id, `🎤 Áudio (${formatted})`, replyTo?.id ?? null, {
+      type: 'audio',
+      audioDurationSec: duration,
+    });
+    setReplyTo(null);
+    setMessages((prev) => (prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]));
+  };
+
+  const handleCancelAudioRecord = () => {
+    if (audioTimerRef.current) {
+      clearInterval(audioTimerRef.current);
+      audioTimerRef.current = null;
+    }
+    setRecordingAudio(false);
+    setAudioSec(0);
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -181,7 +320,44 @@ export function ChatDetailScreen({ route }: any) {
                 </View>
               )}
 
-              {item.type === 'poll' && item.poll ? (
+              {item.type === 'image' && item.mediaUrl && !item.deletedAt ? (
+                <TouchableOpacity onPress={() => setPreviewImageUrl(item.mediaUrl || null)} activeOpacity={0.9}>
+                  <Image source={{ uri: item.mediaUrl }} style={styles.mediaImage} resizeMode="cover" />
+                </TouchableOpacity>
+              ) : item.type === 'video' && !item.deletedAt ? (
+                <View style={styles.videoCard}>
+                  <View style={styles.videoPlayCircle}>
+                    <Text style={styles.videoPlayIcon}>▶</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.msgText}>🎬 Vídeo</Text>
+                    <Text style={styles.videoSub}>Gravado e enviado no Converse</Text>
+                  </View>
+                </View>
+              ) : item.type === 'audio' && !item.deletedAt ? (
+                <TouchableOpacity
+                  style={styles.audioRow}
+                  onPress={() => setPlayingAudioId(playingAudioId === item.id ? null : item.id)}
+                >
+                  <View style={styles.audioPlayBtn}>
+                    <Text style={styles.audioPlayText}>{playingAudioId === item.id ? '❚❚' : '▶'}</Text>
+                  </View>
+                  <View style={styles.audioBars}>
+                    {[6, 12, 16, 9, 15, 11, 18, 8, 14, 7, 13, 9].map((h, idx) => (
+                      <View
+                        key={idx}
+                        style={[
+                          styles.audioBar,
+                          { height: h, backgroundColor: playingAudioId === item.id ? '#00D4FF' : '#8BA4BE' },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                  <Text style={styles.audioDuration}>
+                    0:{String(item.audioDurationSec ?? 8).padStart(2, '0')}
+                  </Text>
+                </TouchableOpacity>
+              ) : item.type === 'poll' && item.poll ? (
                 <View style={{ gap: 6, minWidth: 210 }}>
                   <Text style={[styles.msgText, { fontWeight: '700' }]}>📊 {item.poll.question}</Text>
                   {item.poll.options.map((opt) => {
@@ -235,20 +411,109 @@ export function ChatDetailScreen({ route }: any) {
       )}
 
       <View style={styles.composer}>
+        <TouchableOpacity style={styles.pollBtn} onPress={() => handleOpenMediaCamera('picture')}>
+          <Text style={{ fontSize: 18 }}>📷</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.pollBtn} onPress={() => handleOpenMediaCamera('video')}>
+          <Text style={{ fontSize: 18 }}>🎬</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.pollBtn} onPress={() => setPollModal(true)}>
           <Text style={{ fontSize: 18 }}>📊</Text>
         </TouchableOpacity>
-        <TextInput
-          style={styles.input}
-          value={text}
-          onChangeText={setText}
-          placeholder={editingMsg ? 'Edite sua mensagem...' : 'Mensagem...'}
-          placeholderTextColor="#8BA4BE"
-        />
-        <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
-          <Text style={styles.sendText}>Enviar</Text>
-        </TouchableOpacity>
+        {recordingAudio ? (
+          <View style={styles.recordingBar}>
+            <Text style={styles.recordingText}>🔴 Gravando áudio 0:{String(audioSec).padStart(2, '0')}</Text>
+            <TouchableOpacity onPress={handleCancelAudioRecord}>
+              <Text style={{ color: '#8BA4BE', fontSize: 12, fontWeight: '700' }}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TextInput
+            style={styles.input}
+            value={text}
+            onChangeText={setText}
+            placeholder={editingMsg ? 'Edite sua mensagem...' : 'Mensagem...'}
+            placeholderTextColor="#8BA4BE"
+          />
+        )}
+        {text.trim() ? (
+          <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
+            <Text style={styles.sendText}>Enviar</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.sendBtn, recordingAudio && { backgroundColor: '#F43F5E' }]}
+            onPress={handleToggleAudioRecord}
+          >
+            <Text style={[styles.sendText, recordingAudio && { color: '#FFFFFF' }]}>
+              {recordingAudio ? 'Enviar' : '🎤'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
+
+      <Modal visible={cameraOpen} animationType="slide" onRequestClose={() => setCameraOpen(false)}>
+        <View style={styles.cameraModal}>
+          <CameraView ref={cameraRef} style={{ flex: 1 }} mode={cameraMode} facing={cameraFacing}>
+            <View style={styles.cameraTopBar}>
+              <TouchableOpacity
+                style={styles.cameraActionBtn}
+                onPress={() => {
+                  if (isRecordingVideo) cameraRef.current?.stopRecording();
+                  setCameraOpen(false);
+                }}
+              >
+                <Text style={styles.cameraActionText}>✕ Fechar</Text>
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity
+                  style={[styles.cameraActionBtn, cameraMode === 'picture' && styles.cameraModeActive]}
+                  onPress={() => !isRecordingVideo && setCameraMode('picture')}
+                >
+                  <Text style={styles.cameraActionText}>Foto</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.cameraActionBtn, cameraMode === 'video' && styles.cameraModeActive]}
+                  onPress={() => !isRecordingVideo && setCameraMode('video')}
+                >
+                  <Text style={styles.cameraActionText}>Vídeo</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={styles.cameraActionBtn}
+                onPress={() => !isRecordingVideo && setCameraFacing((f) => (f === 'back' ? 'front' : 'back'))}
+              >
+                <Text style={styles.cameraActionText}>🔄</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.cameraBottomBar}>
+              <TouchableOpacity
+                style={[styles.shutterOuter, isRecordingVideo && { borderColor: '#F43F5E' }]}
+                onPress={handleCaptureOrRecord}
+                disabled={sendingMedia}
+              >
+                {sendingMedia ? (
+                  <ActivityIndicator color="#00D4FF" />
+                ) : (
+                  <View
+                    style={[
+                      styles.shutterInner,
+                      cameraMode === 'video' && { backgroundColor: '#F43F5E' },
+                      isRecordingVideo && { width: 28, height: 28, borderRadius: 6 },
+                    ]}
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
+          </CameraView>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(previewImageUrl)} transparent animationType="fade" onRequestClose={() => setPreviewImageUrl(null)}>
+        <TouchableOpacity style={styles.imagePreviewBackdrop} activeOpacity={1} onPress={() => setPreviewImageUrl(null)}>
+          {previewImageUrl && <Image source={{ uri: previewImageUrl }} style={styles.imagePreviewFull} resizeMode="contain" />}
+        </TouchableOpacity>
+      </Modal>
 
       <Modal visible={pollModal} transparent animationType="slide">
         <View style={styles.modalBackdrop}>
@@ -376,4 +641,80 @@ const styles = StyleSheet.create({
   modalCard: { backgroundColor: '#0D1520', borderRadius: 20, padding: 18, gap: 10 },
   modalTitle: { color: '#F0F7FF', fontSize: 17, fontWeight: '700', marginBottom: 4 },
   modalInput: { backgroundColor: '#132030', color: '#F0F7FF', borderRadius: 12, padding: 12 },
+  mediaImage: { width: 220, height: 220, borderRadius: 12, marginBottom: 4 },
+  videoCard: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 200, paddingVertical: 4 },
+  videoPlayCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#00D4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoPlayIcon: { color: '#070B12', fontSize: 14, fontWeight: '800', marginLeft: 2 },
+  videoSub: { color: '#8BA4BE', fontSize: 11 },
+  audioRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 205, paddingVertical: 4 },
+  audioPlayBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#00D4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  audioPlayText: { color: '#070B12', fontSize: 12, fontWeight: '800' },
+  audioBars: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 3, height: 22 },
+  audioBar: { width: 3, borderRadius: 2 },
+  audioDuration: { color: '#AEBAC1', fontSize: 11, fontWeight: '600' },
+  recordingBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(244,63,94,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(244,63,94,0.45)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  recordingText: { color: '#FDA4AF', fontSize: 13, fontWeight: '700' },
+  cameraModal: { flex: 1, backgroundColor: '#070B12' },
+  cameraTopBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 56,
+    paddingHorizontal: 16,
+  },
+  cameraActionBtn: {
+    backgroundColor: 'rgba(7,11,18,0.72)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
+  cameraModeActive: { borderColor: '#00D4FF', backgroundColor: 'rgba(0,212,255,0.22)' },
+  cameraActionText: { color: '#F0F7FF', fontWeight: '700', fontSize: 13 },
+  cameraBottomBar: { position: 'absolute', bottom: 44, left: 0, right: 0, alignItems: 'center' },
+  shutterOuter: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
+    borderColor: '#00D4FF',
+    backgroundColor: 'rgba(240,247,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shutterInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#F0F7FF' },
+  imagePreviewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  imagePreviewFull: { width: '100%', height: '85%' },
 });

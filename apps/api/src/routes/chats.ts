@@ -66,9 +66,9 @@ chatsRouter.post('/:chatId/messages', (req, res, next) => {
     const chatId = String(req.params.chatId);
     const body = z
       .object({
-        type: z.enum(['text', 'image', 'audio', 'story_reply', 'poll']).default('text'),
+        type: z.enum(['text', 'image', 'audio', 'video', 'story_reply', 'poll']).default('text'),
         content: z.string().min(1).max(4000),
-        mediaUrl: z.string().url().nullable().optional(),
+        mediaUrl: z.string().max(20_000_000).nullable().optional(),
         audioDurationSec: z.number().int().min(1).max(600).nullable().optional(),
         replyToId: z.string().nullable().optional(),
         clientMessageId: z.string().optional(),

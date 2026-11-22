@@ -120,11 +120,19 @@ export const mobileApi = {
     request<{ following: boolean }>(`/api/social/follow/${userId}`, { method: 'POST' }),
   getMessages: (chatId: string) => request<{ messages: MessageItem[] }>(`/api/chats/${chatId}/messages`),
   markRead: (chatId: string) => request(`/api/chats/${chatId}/read`, { method: 'POST' }),
-  sendMessage: (chatId: string, content: string, replyToId?: string | null) =>
+  sendMessage: (
+    chatId: string,
+    content: string,
+    replyToId?: string | null,
+    media?: { type?: 'text' | 'image' | 'audio' | 'video'; mediaUrl?: string | null; audioDurationSec?: number | null }
+  ) =>
     request<{ message: MessageItem }>(`/api/chats/${chatId}/messages`, {
       method: 'POST',
       body: JSON.stringify({
+        type: media?.type || 'text',
         content,
+        mediaUrl: media?.mediaUrl ?? null,
+        audioDurationSec: media?.audioDurationSec ?? null,
         replyToId,
         clientMessageId: `mob-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       }),

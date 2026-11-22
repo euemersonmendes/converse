@@ -19,6 +19,7 @@ export function getIO(): Server | null {
 
 export function initSocketGateway(httpServer: HttpServer, corsOrigin: string | string[]): Server {
   const io = new Server(httpServer, {
+    maxHttpBufferSize: 25 * 1024 * 1024,
     cors: {
       origin: corsOrigin,
       methods: ['GET', 'POST'],
@@ -94,7 +95,7 @@ export function initSocketGateway(httpServer: HttpServer, corsOrigin: string | s
       (
         payload: {
           chatId: string;
-          type?: 'text' | 'image' | 'audio' | 'story_reply';
+          type?: 'text' | 'image' | 'audio' | 'video' | 'story_reply';
           content: string;
           mediaUrl?: string | null;
           audioDurationSec?: number | null;
