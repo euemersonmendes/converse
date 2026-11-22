@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { SOCKET_EVENTS, type ChatSummary, type MessageItem } from '@converse/shared';
+import { HeaderCameraIcon, MicIcon, PlusIcon } from '../components/NavIcons';
 import { mobileApi } from '../config/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -31,6 +32,12 @@ export function ChatDetailScreen({ route }: any) {
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOpt1, setPollOpt1] = useState('');
   const [pollOpt2, setPollOpt2] = useState('');
+
+  // Menu de anexos (+) & Arquivo
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [fileModalOpen, setFileModalOpen] = useState(false);
+  const [fileName, setFileName] = useState('');
+  const [fileLink, setFileLink] = useState('');
 
   // Media (Foto, Vídeo & Áudio)
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -281,6 +288,30 @@ export function ChatDetailScreen({ route }: any) {
     setAudioSec(0);
   };
 
+  const handleSendFile = async () => {
+    if (!fileName.trim()) {
+      Alert.alert('Informe o arquivo', 'Digite o nome do arquivo ou documento.');
+      return;
+    }
+    const content = fileLink.trim()
+      ? `📎 Arquivo: ${fileName.trim()}\n${fileLink.trim()}`
+      : `📎 Arquivo: ${fileName.trim()}`;
+    const res = await mobileApi.sendMessage(chat.id, content, replyTo?.id ?? null);
+    setReplyTo(null);
+    setMessages((prev) => (prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]));
+    setFileName('');
+    setFileLink('');
+    setFileModalOpen(false);
+  };
+
+  const handleSendLocation = async () => {
+    setAttachMenuOpen(false);
+    const city = session?.user.city || 'Localização atual';
+    const res = await mobileApi.sendMessage(chat.id, `📍 Localização compartilhada: ${city}`, replyTo?.id ?? null);
+    setReplyTo(null);
+    setMessages((prev) => (prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]));
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -411,15 +442,10 @@ export function ChatDetailScreen({ route }: any) {
       )}
 
       <View style={styles.composer}>
-        <TouchableOpacity style={styles.pollBtn} onPress={() => handleOpenMediaCamera('picture')}>
-          <Text style={{ fontSize: 18 }}>📷</Text>
+        <TouchableOpacity style={styles.plusBtn} onPress={() => setAttachMenuOpen(true)} activeOpacity={0.85}>
+          <PlusIcon color="#00D4FF" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.pollBtn} onPress={() => handleOpenMediaCamera('video')}>
-          <Text style={{ fontSize: 18 }}>🎬</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.pollBtn} onPress={() => setPollModal(true)}>
-          <Text style={{ fontSize: 18 }}>📊</Text>
-        </TouchableOpacity>
+
         {recordingAudio ? (
           <View style={styles.recordingBar}>
             <Text style={styles.recordingText}>🔴 Gravando áudio 0:{String(audioSec).padStart(2, '0')}</Text>
@@ -434,23 +460,140 @@ export function ChatDetailScreen({ route }: any) {
             onChangeText={setText}
             placeholder={editingMsg ? 'Edite sua mensagem...' : 'Mensagem...'}
             placeholderTextColor="#8BA4BE"
+            multiline
           />
         )}
+
+        <TouchableOpacity
+          style={styles.cameraQuickBtn}
+          onPress={() => handleOpenMediaCamera('picture')}
+          activeOpacity={0.85}
+        >
+          <HeaderCameraIcon color="#F0F7FF" />
+        </TouchableOpacity>
+
         {text.trim() ? (
-          <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
+          <TouchableOpacity style={styles.sendBtn} onPress={handleSend} activeOpacity={0.85}>
             <Text style={styles.sendText}>Enviar</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.sendBtn, recordingAudio && { backgroundColor: '#F43F5E' }]}
+            style={[styles.micBtn, recordingAudio && styles.micBtnRecording]}
             onPress={handleToggleAudioRecord}
+            activeOpacity={0.85}
           >
-            <Text style={[styles.sendText, recordingAudio && { color: '#FFFFFF' }]}>
-              {recordingAudio ? 'Enviar' : '🎤'}
-            </Text>
+            {recordingAudio ? (
+              <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 12 }}>Enviar</Text>
+            ) : (
+              <MicIcon color="#070B12" />
+            )}
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Menu + (Vídeo, Arquivo, Enquete, Localização) */}
+      <Modal visible={attachMenuOpen} transparent animationType="fade" onRequestClose={() => setAttachMenuOpen(false)}>
+        <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setAttachMenuOpen(false)}>
+          <View style={styles.sheetCard}>
+            <Text style={styles.sheetTitle}>Adicionar à conversa</Text>
+            <View style={styles.sheetGrid}>
+              <TouchableOpacity
+                style={styles.sheetItem}
+                onPress={() => {
+                  setAttachMenuOpen(false);
+                  handleOpenMediaCamera('video');
+                }}
+              >
+                <View style={[styles.sheetIcon, { backgroundColor: 'rgba(244,63,94,0.18)' }]}>
+                  <Text style={{ fontSize: 22 }}>🎬</Text>
+                </View>
+                <Text style={styles.sheetLabel}>Vídeo</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sheetItem}
+                onPress={() => {
+                  setAttachMenuOpen(false);
+                  handleOpenMediaCamera('picture');
+                }}
+              >
+                <View style={[styles.sheetIcon, { backgroundColor: 'rgba(0,212,255,0.18)' }]}>
+                  <Text style={{ fontSize: 22 }}>📷</Text>
+                </View>
+                <Text style={styles.sheetLabel}>Foto</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sheetItem}
+                onPress={() => {
+                  setAttachMenuOpen(false);
+                  setFileModalOpen(true);
+                }}
+              >
+                <View style={[styles.sheetIcon, { backgroundColor: 'rgba(139,92,246,0.2)' }]}>
+                  <Text style={{ fontSize: 22 }}>📎</Text>
+                </View>
+                <Text style={styles.sheetLabel}>Arquivo</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sheetItem}
+                onPress={() => {
+                  setAttachMenuOpen(false);
+                  setPollModal(true);
+                }}
+              >
+                <View style={[styles.sheetIcon, { backgroundColor: 'rgba(16,185,129,0.2)' }]}>
+                  <Text style={{ fontSize: 22 }}>📊</Text>
+                </View>
+                <Text style={styles.sheetLabel}>Enquete</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.sheetItem} onPress={handleSendLocation}>
+                <View style={[styles.sheetIcon, { backgroundColor: 'rgba(245,158,11,0.2)' }]}>
+                  <Text style={{ fontSize: 22 }}>📍</Text>
+                </View>
+                <Text style={styles.sheetLabel}>Localização</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Modal Enviar Arquivo */}
+      <Modal visible={fileModalOpen} transparent animationType="slide" onRequestClose={() => setFileModalOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Enviar Arquivo / Documento</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={fileName}
+              onChangeText={setFileName}
+              placeholder="Nome do arquivo (ex: Contrato.pdf)"
+              placeholderTextColor="#8BA4BE"
+            />
+            <TextInput
+              style={styles.modalInput}
+              value={fileLink}
+              onChangeText={setFileLink}
+              placeholder="Link ou descrição (opcional)"
+              placeholderTextColor="#8BA4BE"
+              autoCapitalize="none"
+            />
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+              <TouchableOpacity
+                style={[styles.sendBtn, { flex: 1, backgroundColor: '#1E3248' }]}
+                onPress={() => setFileModalOpen(false)}
+              >
+                <Text style={{ color: '#F0F7FF', textAlign: 'center', fontWeight: '600' }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.sendBtn, { flex: 1 }]} onPress={handleSendFile}>
+                <Text style={[styles.sendText, { textAlign: 'center' }]}>Enviar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={cameraOpen} animationType="slide" onRequestClose={() => setCameraOpen(false)}>
         <View style={styles.cameraModal}>
@@ -615,28 +758,92 @@ const styles = StyleSheet.create({
   },
   composer: {
     flexDirection: 'row',
-    padding: 10,
-    backgroundColor: '#132030',
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 14,
+    backgroundColor: '#0B121D',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,212,255,0.2)',
     alignItems: 'center',
     gap: 8,
   },
-  pollBtn: { padding: 6 },
+  plusBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#132030',
+    borderWidth: 1,
+    borderColor: 'rgba(0,212,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   input: {
     flex: 1,
-    backgroundColor: '#1E3248',
+    minHeight: 46,
+    maxHeight: 110,
+    backgroundColor: '#132030',
     color: '#F0F7FF',
-    borderRadius: 20,
+    borderRadius: 23,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15,
+    paddingVertical: 12,
+    fontSize: 15.5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  cameraQuickBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#132030',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#00D4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#00D4FF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+  },
+  micBtnRecording: {
+    width: 64,
+    backgroundColor: '#F43F5E',
+    shadowColor: '#F43F5E',
   },
   sendBtn: {
     backgroundColor: '#00D4FF',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    height: 44,
+    justifyContent: 'center',
+    borderRadius: 22,
   },
-  sendText: { color: '#0D1520', fontWeight: '700' },
+  sendText: { color: '#0D1520', fontWeight: '800' },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'flex-end',
+  },
+  sheetCard: {
+    backgroundColor: '#0D1520',
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    padding: 20,
+    paddingBottom: 34,
+    borderTopWidth: 1,
+    borderColor: 'rgba(0,212,255,0.22)',
+  },
+  sheetTitle: { color: '#F0F7FF', fontSize: 16, fontWeight: '800', marginBottom: 16 },
+  sheetGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  sheetItem: { width: '28%', alignItems: 'center', gap: 6 },
+  sheetIcon: { width: 54, height: 54, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  sheetLabel: { color: '#D1DFEE', fontSize: 12.5, fontWeight: '600' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', padding: 20 },
   modalCard: { backgroundColor: '#0D1520', borderRadius: 20, padding: 18, gap: 10 },
   modalTitle: { color: '#F0F7FF', fontSize: 17, fontWeight: '700', marginBottom: 4 },

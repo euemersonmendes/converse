@@ -124,6 +124,27 @@ export function HeaderDotsIcon({ color = '#F0F7FF' }: { color?: string }) {
   );
 }
 
+/** Ícone de sinal + para abrir menu de anexos na conversa. */
+export function PlusIcon({ color = '#00D4FF' }: { color?: string }) {
+  return (
+    <View style={styles.box}>
+      <View style={[styles.plusH, { backgroundColor: color }]} />
+      <View style={[styles.plusV, { backgroundColor: color }]} />
+    </View>
+  );
+}
+
+/** Ícone de microfone ligado para gravação de áudio. */
+export function MicIcon({ color = '#070B12' }: { color?: string }) {
+  return (
+    <View style={styles.box}>
+      <View style={[styles.micHead, { borderColor: color, backgroundColor: color }]} />
+      <View style={[styles.micArc, { borderColor: color }]} />
+      <View style={[styles.micStem, { backgroundColor: color }]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   box: {
     width: 24,
@@ -258,5 +279,36 @@ const styles = StyleSheet.create({
     width: 3.5,
     height: 3.5,
     borderRadius: 1.75,
+  },
+  plusH: {
+    width: 16,
+    height: 2.4,
+    borderRadius: 1.2,
+  },
+  plusV: {
+    position: 'absolute',
+    width: 2.4,
+    height: 16,
+    borderRadius: 1.2,
+  },
+  micHead: {
+    width: 8,
+    height: 12,
+    borderRadius: 4,
+    borderWidth: 1.5,
+  },
+  micArc: {
+    width: 14,
+    height: 7,
+    borderBottomLeftRadius: 7,
+    borderBottomRightRadius: 7,
+    borderWidth: 2,
+    borderTopWidth: 0,
+    marginTop: -4,
+  },
+  micStem: {
+    width: 2,
+    height: 3.5,
+    borderRadius: 1,
   },
 });
