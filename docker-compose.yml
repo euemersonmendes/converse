@@ -1,0 +1,30 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET com pelo menos 24 caracteres}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://converse.seu-dominio.com}
+      DB_PATH: /app/data/converse.db
+      SEED_DEMO: ${SEED_DEMO:-false}
+    volumes:
+      - converse_data:/app/data
+    ports:
+      - "3001:3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+
+volumes:
+  converse_data:

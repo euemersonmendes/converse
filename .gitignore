@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# SQLite database files
+apps/api/data/*.db
+apps/api/data/*.db-shm
+apps/api/data/*.db-wal
+
+# Expo & Mobile native build artifacts
+.expo/
+apps/mobile/.expo/
+apps/mobile/ios/build/
+apps/mobile/ios/Pods/
+apps/mobile/android/build/
+apps/mobile/android/.gradle/
+*.ipa
+*.xcarchive
+*.apk
+*.aab
+
+# Logs & OS
+*.log
+npm-debug.log*
+.DS_Store

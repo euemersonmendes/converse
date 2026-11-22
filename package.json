@@ -1,0 +1,20 @@
+{
+  "name": "converse-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web",
+    "apps/mobile"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace=apps/api run dev",
+    "dev:web": "npm --workspace=apps/web run dev",
+    "dev:mobile": "npm --workspace=apps/mobile run start",
+    "build:shared": "npm --workspace=packages/shared run build",
+    "build:api": "npm --workspace=apps/api run build",
+    "build:web": "npm --workspace=apps/web run build",
+    "test:api": "npm --workspace=apps/api run test"
+  }
+}

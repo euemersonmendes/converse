@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #070B12;
+    color: #F0F7FF;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(139, 164, 190, 0.22);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 212, 255, 0.45);
+  }
+}
+
+.ig-ring {
+  background: linear-gradient(135deg, #00d4ff 0%, #0ea5e9 45%, #2563eb 100%);
+}
+
+.converse-btn-gradient {
+  background: linear-gradient(135deg, #00d4ff 0%, #0284c7 100%);
+  box-shadow: 0 6px 20px -4px rgba(0, 212, 255, 0.4);
+}
+
+.converse-btn-gradient:hover {
+  background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+  box-shadow: 0 8px 24px -4px rgba(0, 212, 255, 0.55);
+}
+
+.converse-bubble-mine {
+  background: linear-gradient(135deg, #0e4f7a 0%, #0a3658 100%);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+.converse-bubble-peer {
+  background: rgba(19, 32, 48, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-panel {
+  background: rgba(13, 21, 32, 0.78);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chat-bg-pattern {
+  background-color: #070B12;
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(0, 212, 255, 0.04) 0%, transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(37, 99, 235, 0.05) 0%, transparent 45%),
+    radial-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 26px 26px;
+}
